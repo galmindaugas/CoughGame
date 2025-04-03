@@ -391,6 +391,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Delete responses by date
+  app.delete("/api/responses/clear-by-date/:date", async (req, res) => {
+    try {
+      const { date } = req.params;
+      
+      if (!date) {
+        return res.status(400).json({ message: "Date parameter is required" });
+      }
+      
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        return res.status(400).json({ message: "Invalid date format" });
+      }
+      
+      const deletedCount = await storage.deleteResponsesByDate(dateObj);
+      
+      return res.status(200).json({ 
+        message: `Successfully deleted ${deletedCount} responses from ${dateObj.toDateString()}`,
+        deletedCount 
+      });
+    } catch (error) {
+      console.error("Error deleting responses:", error);
+      return res.status(500).json({ message: "Error deleting responses by date" });
+    }
+  });
+  
+  // Keep old endpoint for backward compatibility
+  app.delete("/api/responses/by-date", async (req, res) => {
+    try {
+      const { date } = req.body;
+      
+      if (!date) {
+        return res.status(400).json({ message: "Date parameter is required" });
+      }
+      
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        return res.status(400).json({ message: "Invalid date format" });
+      }
+      
+      const deletedCount = await storage.deleteResponsesByDate(dateObj);
+      
+      return res.status(200).json({ 
+        message: `Successfully deleted ${deletedCount} responses from ${dateObj.toDateString()}`,
+        deletedCount 
+      });
+    } catch (error) {
+      console.error("Error deleting responses:", error);
+      return res.status(500).json({ message: "Error deleting responses by date" });
+    }
+  });
+  
   // Get response statistics
   app.get("/api/stats", async (_req, res) => {
     try {

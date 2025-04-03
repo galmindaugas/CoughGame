@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { ResponseStats, AudioSnippet } from "@shared/schema";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface ResponseData {
   id: number;
@@ -39,12 +40,48 @@ const Responses = () => {
   const [filterAudioId, setFilterAudioId] = useState<string>("all");
   const [filterResponse, setFilterResponse] = useState<string>("all");
   const [filterDate, setFilterDate] = useState<string>("");
+  const [clearDate, setClearDate] = useState<string>("");
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Prepare query parameters
   // Query for responses
   const { data: responses = [], isLoading: isLoadingResponses } = useQuery<ResponseData[]>({
     queryKey: ["/api/responses"],
+  });
+  
+  // Mutation for clearing responses by date
+  const clearResponsesMutation = useMutation({
+    mutationFn: async (date: string) => {
+      const formattedDate = new Date(date).toISOString().split('T')[0]; // Format as YYYY-MM-DD
+      const res = await fetch(`/api/responses/clear-by-date/${formattedDate}`, {
+        method: 'DELETE',
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || 'Failed to clear responses');
+      }
+      
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Responses cleared",
+        description: `Successfully cleared ${data.deletedCount} responses`,
+      });
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/responses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      setClearDate("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to clear responses",
+        variant: "destructive",
+      });
+    }
   });
 
   // Query for audio snippets (for filter dropdown)
@@ -228,7 +265,7 @@ const Responses = () => {
             </div>
           )}
 
-          <div className="mt-6">
+          <div className="mt-6 flex flex-col sm:flex-row gap-4">
             <Button
               onClick={exportResponses}
               variant="outline"
@@ -251,6 +288,82 @@ const Responses = () => {
               </svg>
               Export Data (CSV)
             </Button>
+            
+            {/* Clear Responses By Date */}
+            <div className="flex-1 sm:max-w-xs">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="border border-red-500 text-red-500 hover:bg-red-500 hover:text-white"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 mr-2"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                    Clear Responses
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-primary">Clear Responses By Date</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This action will permanently delete all responses from the selected date. 
+                      This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  
+                  <div className="my-4">
+                    <Label htmlFor="clear-date" className="block text-sm font-medium mb-2">
+                      Select Date
+                    </Label>
+                    <Input
+                      type="date"
+                      id="clear-date"
+                      value={clearDate}
+                      onChange={(e) => setClearDate(e.target.value)}
+                      required
+                      className="w-full"
+                    />
+                  </div>
+                  
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        if (!clearDate) {
+                          toast({
+                            title: "Date required",
+                            description: "Please select a date to clear responses from",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        clearResponsesMutation.mutate(clearDate);
+                      }}
+                      disabled={clearResponsesMutation.isPending}
+                      className="bg-red-500 hover:bg-red-600 focus:ring-red-500"
+                    >
+                      {clearResponsesMutation.isPending ? (
+                        <div className="h-5 w-5 animate-spin rounded-full border-t-2 border-b-2 border-white"></div>
+                      ) : (
+                        "Clear Responses"
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
         </CardContent>
       </Card>

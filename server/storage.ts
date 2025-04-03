@@ -6,7 +6,7 @@ import {
 } from "@shared/schema";
 import { nanoid } from "nanoid";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, lte } from "drizzle-orm";
 
 // Storage interface
 export interface IStorage {
@@ -31,6 +31,7 @@ export interface IStorage {
   getResponsesByParticipantId(participantId: number): Promise<Response[]>;
   getResponsesByAudioSnippetId(audioSnippetId: number): Promise<Response[]>;
   getAllResponses(): Promise<Response[]>;
+  deleteResponsesByDate(date: Date): Promise<number>; // Returns count of deleted responses
   
   // Analytics methods
   getResponseStatsByAudioSnippet(audioSnippetId: number): Promise<ResponseStats | undefined>;
@@ -140,6 +141,35 @@ export class DatabaseStorage implements IStorage {
   
   async getAllResponses(): Promise<Response[]> {
     return await db.select().from(responses);
+  }
+  
+  async deleteResponsesByDate(date: Date): Promise<number> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    // First, get all responses within the date range to know how many will be deleted
+    const responsesToDelete = await db.select()
+      .from(responses)
+      .where(
+        and(
+          gte(responses.responseDate, startOfDay),
+          lte(responses.responseDate, endOfDay)
+        )
+      );
+    
+    // Delete the responses
+    await db.delete(responses)
+      .where(
+        and(
+          gte(responses.responseDate, startOfDay),
+          lte(responses.responseDate, endOfDay)
+        )
+      );
+    
+    return responsesToDelete.length;
   }
   
   // Analytics methods
