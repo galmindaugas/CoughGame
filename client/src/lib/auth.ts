@@ -1,11 +1,6 @@
-import React, { createContext, ReactNode, useContext } from "react";
-import {
-  useQuery,
-  useMutation,
-  UseMutationResult,
-} from "@tanstack/react-query";
-import { getQueryFn, apiRequest, queryClient } from "./queryClient";
-import { useToast } from "@/hooks/use-toast";
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { apiRequest } from './queryClient';
+import { useLocation } from 'wouter';
 
 type User = {
   id: number;
@@ -13,93 +8,82 @@ type User = {
   isAdmin: number;
 };
 
-type LoginData = {
-  username: string;
-  password: string;
-};
-
-type AuthContextType = {
+interface AuthContextType {
   user: User | null;
-  isLoading: boolean;
-  error: Error | null;
-  loginMutation: UseMutationResult<User, Error, LoginData>;
-  logoutMutation: UseMutationResult<void, Error, void>;
-};
+  loading: boolean;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+}
 
-export const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  login: async () => {},
+  logout: async () => {},
+});
 
-export function AuthProvider(props: { children: ReactNode }) {
-  const { toast } = useToast();
-  
-  const {
-    data: user,
-    error,
-    isLoading,
-  } = useQuery<User | null, Error>({
-    queryKey: ["/api/user"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-  });
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [_, navigate] = useLocation();
 
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      return await res.json();
-    },
-    onSuccess: (user: User) => {
-      queryClient.setQueryData(["/api/user"], user);
-      toast({
-        title: "Login successful",
-        description: `Welcome, ${user.username}!`,
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await fetch('/api/user', {
+        credentials: 'include',
       });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Login failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(["/api/user"], null);
-      toast({
-        title: "Logged out",
-        description: "You have been successfully logged out.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Logout failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const contextValue: AuthContextType = {
-    user: user ?? null,
-    isLoading,
-    error,
-    loginMutation,
-    logoutMutation,
+      
+      if (res.ok) {
+        const userData = await res.json();
+        setUser(userData);
+      } else {
+        setUser(null);
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return React.createElement(
-    AuthContext.Provider,
-    { value: contextValue },
-    props.children
-  );
-}
+  useEffect(() => {
+    fetchCurrentUser();
+  }, []);
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-}
+  const login = async (username: string, password: string) => {
+    setLoading(true);
+    try {
+      const res = await apiRequest('POST', '/api/login', { username, password });
+      const userData = await res.json();
+      setUser(userData);
+      navigate('/admin');
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    setLoading(true);
+    try {
+      await apiRequest('POST', '/api/logout');
+      setUser(null);
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);

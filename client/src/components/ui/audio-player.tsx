@@ -1,179 +1,159 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Volume2, VolumeX } from "lucide-react";
-import { Slider } from "@/components/ui/slider";
-import { Button } from "@/components/ui/button";
-import { formatDuration } from "@/lib/audio";
+import { Button } from "./button";
+import { Slider } from "./slider";
+import { Play, Pause, Volume2 } from "lucide-react";
 
 interface AudioPlayerProps {
   audioUrl: string;
   duration: number; // duration in milliseconds
-  onPlay?: () => void;
 }
 
-export function AudioPlayer({ audioUrl, duration, onPlay }: AudioPlayerProps) {
+export function AudioPlayer({ audioUrl, duration }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(80);
   const [currentTime, setCurrentTime] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const [volume, setVolume] = useState(70);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const progressBarRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Convert duration from ms to seconds
-  const durationInSeconds = duration / 1000;
-
-  // Calculate progress percentage
-  const progressPercentage = 
-    durationInSeconds > 0 ? (currentTime / durationInSeconds) * 100 : 0;
-
-  // Handle play/pause
-  const togglePlayPause = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isPlaying) {
+  // Create audio element
+  useEffect(() => {
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    
+    audio.addEventListener('loadeddata', () => {
+      setIsLoaded(true);
+    });
+    
+    audio.addEventListener('error', () => {
+      setError('Failed to load audio file');
+    });
+    
+    audio.addEventListener('ended', () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    });
+    
+    audio.addEventListener('timeupdate', () => {
+      setCurrentTime(audio.currentTime * 1000);
+    });
+    
+    // Set initial volume
+    audio.volume = volume / 100;
+    
+    return () => {
       audio.pause();
+      audio.src = '';
+      
+      audio.removeEventListener('loadeddata', () => {});
+      audio.removeEventListener('error', () => {});
+      audio.removeEventListener('ended', () => {});
+      audio.removeEventListener('timeupdate', () => {});
+    };
+  }, [audioUrl]);
+
+  // Play/Pause control
+  const togglePlayPause = () => {
+    if (!audioRef.current) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
     } else {
-      audio.play();
-      if (onPlay) onPlay();
+      audioRef.current.play().catch(err => {
+        setError('Failed to play audio: ' + err.message);
+      });
     }
+    
     setIsPlaying(!isPlaying);
   };
 
-  // Handle time update
-  const handleTimeUpdate = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    setCurrentTime(audio.currentTime);
-  };
-
-  // Handle click on progress bar
-  const handleProgressBarClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    const audio = audioRef.current;
-    const progressBar = progressBarRef.current;
-    if (!audio || !progressBar) return;
-
-    const rect = progressBar.getBoundingClientRect();
-    const percentage = (event.clientX - rect.left) / rect.width;
-    audio.currentTime = percentage * durationInSeconds;
-    setCurrentTime(percentage * durationInSeconds);
-  };
-
-  // Handle mute toggle
-  const toggleMute = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isMuted) {
-      audio.volume = volume / 100;
-    } else {
-      audio.volume = 0;
-    }
-    setIsMuted(!isMuted);
-  };
-
-  // Handle volume change
+  // Volume control
   const handleVolumeChange = (value: number[]) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
     const newVolume = value[0];
     setVolume(newVolume);
-    audio.volume = newVolume / 100;
     
-    if (newVolume === 0) {
-      setIsMuted(true);
-    } else if (isMuted) {
-      setIsMuted(false);
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume / 100;
     }
   };
 
-  // Handle audio end
-  const handleEnded = () => {
-    setIsPlaying(false);
-    setCurrentTime(0);
+  // Format time display (mm:ss)
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  // Set initial volume
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.volume = volume / 100;
-  }, [volume]);
+  // Format duration time
+  const formatDuration = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   return (
-    <div className="bg-gray-100 rounded-md p-3">
-      <audio
-        ref={audioRef}
-        src={audioUrl}
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={handleEnded}
-        preload="metadata"
-      />
+    <div className="flex flex-col items-center w-full">
+      {/* Audio Visualization (static for now) */}
+      <div className="w-48 h-24 mb-4 flex items-end justify-between space-x-1">
+        {[...Array(10)].map((_, i) => (
+          <div 
+            key={i} 
+            className="bg-primary w-1.5 rounded-t"
+            style={{ height: `${Math.random() * 60 + 20}%` }}
+          />
+        ))}
+      </div>
       
-      <div className="flex items-center gap-2 mb-2">
+      {error && (
+        <div className="text-red-500 text-sm mb-4">
+          {error}
+        </div>
+      )}
+      
+      {/* Play/Pause button & progress */}
+      <div className="flex items-center space-x-4 mb-6 w-full">
         <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 w-8 p-0 rounded-full"
+          variant="default"
+          className="w-14 h-14 rounded-full flex items-center justify-center shadow-md p-0"
           onClick={togglePlayPause}
+          disabled={!isLoaded || !!error}
         >
           {isPlaying ? (
-            <Pause className="h-4 w-4" />
+            <Pause className="h-6 w-6" />
           ) : (
-            <Play className="h-4 w-4" />
+            <Play className="h-6 w-6" />
           )}
         </Button>
         
-        <div className="text-sm text-gray-600 font-medium min-w-[70px]">
-          {formatDuration(currentTime)} / {formatDuration(durationInSeconds)}
-        </div>
-        
-        <div className="relative ml-auto">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-8 p-0 rounded-full"
-            onClick={toggleMute}
-            onMouseEnter={() => setShowVolumeSlider(true)}
-            onMouseLeave={() => setShowVolumeSlider(false)}
-          >
-            {isMuted ? (
-              <VolumeX className="h-4 w-4" />
-            ) : (
-              <Volume2 className="h-4 w-4" />
-            )}
-          </Button>
-          
-          {showVolumeSlider && (
-            <div 
-              className="absolute -left-16 bottom-full p-3 bg-white shadow-md rounded-md z-10"
-              onMouseEnter={() => setShowVolumeSlider(true)}
-              onMouseLeave={() => setShowVolumeSlider(false)}
-            >
-              <div className="h-20 w-5 relative flex items-center justify-center">
-                <Slider
-                  defaultValue={[volume]}
-                  max={100}
-                  step={1}
-                  orientation="vertical"
-                  onValueChange={handleVolumeChange}
-                  className="h-full w-3"
-                />
-              </div>
-            </div>
-          )}
+        <div className="flex-1">
+          <Slider 
+            defaultValue={[0]} 
+            max={duration} 
+            step={10} 
+            value={[currentTime]} 
+            disabled
+            className="cursor-default"
+          />
+          <div className="flex justify-between mt-1">
+            <span className="text-xs text-gray-500">{formatTime(currentTime)}</span>
+            <span className="text-xs text-gray-500">{formatDuration(duration)}</span>
+          </div>
         </div>
       </div>
       
-      <div
-        className="h-2 bg-gray-300 rounded-full overflow-hidden cursor-pointer relative"
-        onClick={handleProgressBarClick}
-        ref={progressBarRef}
-      >
-        <div
-          className="absolute top-0 left-0 h-full bg-blue-500 rounded-full transition-all"
-          style={{ width: `${progressPercentage}%` }}
+      {/* Volume control */}
+      <div className="flex items-center space-x-2 text-sm text-gray-500">
+        <Volume2 className="h-4 w-4" />
+        <span>Volume</span>
+        <Slider
+          value={[volume]}
+          min={0}
+          max={100}
+          step={1}
+          onValueChange={handleVolumeChange}
+          className="w-32"
         />
       </div>
     </div>

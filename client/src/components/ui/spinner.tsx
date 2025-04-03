@@ -6,16 +6,16 @@ interface SpinnerProps {
   className?: string;
 }
 
-export const Spinner = ({ size = "md", className }: SpinnerProps) => {
+export function Spinner({ size = "md", className }: SpinnerProps) {
   const sizeClasses = {
     sm: "h-4 w-4",
     md: "h-6 w-6",
-    lg: "h-10 w-10",
+    lg: "h-10 w-10"
   };
-
+  
   return (
-    <Loader2 
-      className={cn("text-blue-600 animate-spin", sizeClasses[size], className)} 
-    />
+    <div className="flex justify-center">
+      <Loader2 className={cn("animate-spin text-primary", sizeClasses[size], className)} />
+    </div>
   );
-};
+}

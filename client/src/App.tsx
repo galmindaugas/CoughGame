@@ -1,22 +1,35 @@
+import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
-import { Switch, Route } from "wouter";
-import { AuthProvider } from "./lib/auth.jsx";
-import { ProtectedRoute } from "./lib/protected-route";
-import Home from "@/pages/home";
 import NotFound from "@/pages/not-found";
-import AuthPage from "@/pages/auth-page";
-import Admin from "@/pages/admin";
-import Evaluate from "@/pages/evaluate";
+import Admin from "@/pages/admin/Admin";
+import Login from "@/pages/admin/Login";
+import Evaluation from "@/pages/participant/Evaluation";
+import ThankYou from "@/pages/participant/ThankYou";
 
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute path="/" component={Home} />
-      <ProtectedRoute path="/admin" component={Admin} />
-      <Route path="/auth" component={AuthPage} />
-      <Route path="/evaluate/:sessionId" component={Evaluate} />
+      {/* Admin routes */}
+      <Route path="/admin" component={Admin} />
+      <Route path="/admin/login" component={Login} />
+      
+      {/* Participant routes */}
+      <Route path="/evaluate/:sessionId">
+        {params => <Evaluation sessionId={params.sessionId} />}
+      </Route>
+      <Route path="/thank-you" component={ThankYou} />
+      
+      {/* Home route redirects to admin login */}
+      <Route path="/">
+        {() => {
+          window.location.href = "/admin/login";
+          return null;
+        }}
+      </Route>
+      
+      {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>
   );
@@ -25,10 +38,8 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Router />
-        <Toaster />
-      </AuthProvider>
+      <Router />
+      <Toaster />
     </QueryClientProvider>
   );
 }

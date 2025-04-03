@@ -1,39 +1,38 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
-import { CheckCircle, Home } from "lucide-react";
 
-export default function ThankYou() {
+const ThankYou = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <Card className="max-w-md w-full shadow-lg border-0">
-        <CardContent className="pt-6 pb-8 px-6">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-6">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-            </div>
-            
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Thank You!</h1>
-            <p className="text-gray-600 mb-6">
-              Your evaluation has been successfully completed.
-              Your contribution helps improve our audio classification models.
-            </p>
-
-            <div className="bg-blue-50 rounded-lg p-4 mb-6 w-full">
-              <p className="text-sm text-blue-800">
-                Your session is now complete. You may close this window or return to the home page.
-              </p>
-            </div>
-            
-            <Link href="/">
-              <Button className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600">
-                <Home className="w-4 h-4" />
-                Return to Home
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background dark:bg-darkBg">
+      <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-8 max-w-md w-full text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-primary bg-opacity-10 rounded-full mb-6">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-12 w-12 text-primary"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+        </div>
+        <h1 className="text-2xl font-semibold mb-2">Thank You!</h1>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          You've completed all audio evaluations. Your responses have been recorded.
+        </p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
+          Feel free to close this window or return to the conference.
+        </p>
+        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+          <p className="text-sm text-gray-500">Cough Conference Audio Evaluation</p>
+        </div>
+      </div>
     </div>
   );
-}
+};
+
+export default ThankYou;
