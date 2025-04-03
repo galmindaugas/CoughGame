@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +8,10 @@ import ResponseOption from "@/components/ResponseOption";
 import ProgressIndicator from "@/components/ProgressIndicator";
 import FeedbackModal from "@/components/FeedbackModal";
 import { feedbackMessages } from "@shared/schema";
+import { HexagonPattern } from "@/components/ui/hexagon-pattern";
+import { HyfeLogo } from "@/components/ui/hyfe-logo";
+import { Spinner } from "@/components/ui/spinner";
+import { AlertTriangle } from "lucide-react";
 
 interface EvaluationProps {
   sessionId: string;
@@ -27,6 +31,8 @@ const Evaluation = ({ sessionId }: EvaluationProps) => {
   const { toast } = useToast();
   const [currentAudioIndex, setCurrentAudioIndex] = useState(0);
   const [showFeedback, setShowFeedback] = useState(false);
+  // Add a key to force AudioPlayer remounting when audio changes
+  const [audioPlayerKey, setAudioPlayerKey] = useState<number>(0);
   const [feedbackStats, setFeedbackStats] = useState<{
     coughPercentage: number;
     throatClearPercentage: number;
@@ -56,7 +62,7 @@ const Evaluation = ({ sessionId }: EvaluationProps) => {
         },
         body: JSON.stringify({
           sessionId,
-          participantId: data?.participant.id, // Add participant ID
+          participantId: data?.participant.id,
           audioSnippetId,
           selectedOption,
         }),
@@ -106,40 +112,29 @@ const Evaluation = ({ sessionId }: EvaluationProps) => {
   // Prevent invalid access
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        <p className="mt-4">Loading audio samples...</p>
-      </div>
+      <HexagonPattern className="min-h-screen flex flex-col items-center justify-center p-6">
+        <HyfeLogo size="large" className="mb-8" />
+        <Spinner size="lg" className="text-primary" />
+        <p className="mt-6 text-secondary-medium">Loading audio samples...</p>
+      </HexagonPattern>
     );
   }
 
   if (!data || !data.audioSnippets || data.audioSnippets.length === 0) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
-        <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-8 max-w-md w-full text-center">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-16 w-16 text-yellow-500 mx-auto mb-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
-          <h1 className="text-2xl font-semibold mb-2">No Audio Available</h1>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
+      <HexagonPattern className="min-h-screen flex flex-col items-center justify-center p-6">
+        <HyfeLogo size="large" className="mb-8" />
+        <div className="bg-white shadow-lg rounded-lg p-8 max-w-md w-full text-center">
+          <AlertTriangle className="h-16 w-16 text-primary mx-auto mb-6" />
+          <h1 className="text-2xl font-semibold mb-2 text-secondary">No Audio Available</h1>
+          <p className="text-secondary-medium mb-6">
             There are no audio samples available for evaluation at this time.
           </p>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
+          <p className="text-hyfe-grey text-sm">
             Please contact the conference organizer or try again later.
           </p>
         </div>
-      </div>
+      </HexagonPattern>
     );
   }
 
@@ -158,6 +153,8 @@ const Evaluation = ({ sessionId }: EvaluationProps) => {
     setShowFeedback(false);
     
     if (currentAudioIndex < data.audioSnippets.length - 1) {
+      // Increment the key to force a remount of the AudioPlayer component
+      setAudioPlayerKey(prev => prev + 1);
       setCurrentAudioIndex(currentAudioIndex + 1);
     } else {
       // All done, go to thank you page
@@ -166,36 +163,38 @@ const Evaluation = ({ sessionId }: EvaluationProps) => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <HexagonPattern className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm p-4 text-center">
-        <h1 className="text-xl font-semibold text-primary">Cough Conference Audio Evaluation</h1>
+      <header className="bg-white shadow-sm p-4 flex justify-center">
+        <HyfeLogo size="medium" />
       </header>
 
       {/* Main content */}
       <div className="flex-grow flex flex-col p-4">
-        <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6 mb-4 max-w-md mx-auto w-full">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium">
-              Audio Snippet <span>{currentAudioIndex + 1}</span>/{totalCount}
+        <div className="bg-white shadow-lg rounded-lg p-6 mb-4 max-w-md mx-auto w-full">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-secondary">
+              Audio Snippet <span className="text-primary">{currentAudioIndex + 1}</span>/{totalCount}
             </h2>
           </div>
 
+          {/* Force a remount of the AudioPlayer when the audio changes */}
           <AudioPlayer
+            key={audioPlayerKey}
             audioUrl={`/api/uploads/${currentAudio.filename}`}
             disabled={responseMutation.isPending}
           />
 
-          <div className="text-center text-sm text-gray-500 my-4">
+          <div className="text-center text-secondary-medium my-6">
             Choose what you think this audio represents:
           </div>
 
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-4">
             <ResponseOption
               option="cough"
               label="Cough"
               icon="😷"
-              color="blue"
+              color="primary"
               onSelect={handleOptionSelect}
               disabled={responseMutation.isPending}
             />
@@ -203,7 +202,7 @@ const Evaluation = ({ sessionId }: EvaluationProps) => {
               option="throat-clear"
               label="Throat Clear"
               icon="😐"
-              color="orange"
+              color="secondary"
               onSelect={handleOptionSelect}
               disabled={responseMutation.isPending}
             />
@@ -211,7 +210,7 @@ const Evaluation = ({ sessionId }: EvaluationProps) => {
               option="other"
               label="Other"
               icon="🤔"
-              color="gray"
+              color="hyfe-grey"
               onSelect={handleOptionSelect}
               disabled={responseMutation.isPending}
             />
@@ -233,7 +232,7 @@ const Evaluation = ({ sessionId }: EvaluationProps) => {
           onClose={handleNextAudio}
         />
       )}
-    </div>
+    </HexagonPattern>
   );
 };
 
