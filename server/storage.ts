@@ -1,249 +1,261 @@
 import { 
-  User, InsertUser, 
-  Participant, InsertParticipant,
-  AudioFile, InsertAudioFile,
-  Response, InsertResponse,
-  ParticipantSession, AudioStats,
-  humorousFeedback
+  Admin, InsertAdmin, AudioSnippet, InsertAudioSnippet, 
+  Participant, InsertParticipant, Response, InsertResponse,
+  ResponseStats, AudioSnippetWithStats, responseOptions
 } from "@shared/schema";
+import { nanoid } from "nanoid";
 
-// Storage interface with all necessary CRUD operations
+// Storage interface
 export interface IStorage {
-  // User operations
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-
-  // Participant operations
-  getParticipant(id: number): Promise<Participant | undefined>;
-  getParticipantById(participantId: string): Promise<Participant | undefined>;
+  // Admin methods
+  getAdminByUsername(username: string): Promise<Admin | undefined>;
+  createAdmin(admin: InsertAdmin): Promise<Admin>;
+  
+  // Audio snippet methods
+  createAudioSnippet(snippet: InsertAudioSnippet): Promise<AudioSnippet>;
+  getAudioSnippetById(id: number): Promise<AudioSnippet | undefined>;
+  getAllAudioSnippets(): Promise<AudioSnippet[]>;
+  deleteAudioSnippet(id: number): Promise<boolean>;
+  
+  // Participant methods
   createParticipant(participant: InsertParticipant): Promise<Participant>;
+  getParticipantBySessionId(sessionId: string): Promise<Participant | undefined>;
+  getParticipantById(id: number): Promise<Participant | undefined>;
+  getAllParticipants(): Promise<Participant[]>;
   
-  // Audio file operations
-  getAudioFile(id: number): Promise<AudioFile | undefined>;
-  getAudioFileById(audioId: string): Promise<AudioFile | undefined>;
-  getAudioFiles(): Promise<AudioFile[]>;
-  createAudioFile(audioFile: InsertAudioFile): Promise<AudioFile>;
-  deleteAudioFile(audioId: string): Promise<boolean>;
-  
-  // Response operations
-  getResponse(id: number): Promise<Response | undefined>;
+  // Response methods
   createResponse(response: InsertResponse): Promise<Response>;
-  getResponsesByParticipant(participantId: string): Promise<Response[]>;
-  getResponsesByAudio(audioId: string): Promise<Response[]>;
+  getResponsesByParticipantId(participantId: number): Promise<Response[]>;
+  getResponsesByAudioSnippetId(audioSnippetId: number): Promise<Response[]>;
   getAllResponses(): Promise<Response[]>;
   
-  // Application-specific operations
-  getRandomAudioIdsForSession(count: number): Promise<string[]>;
-  getAudioStats(audioId: string): Promise<AudioStats>;
-  getRandomFeedback(): string;
-
-  // Session management
-  createSession(participantId: string, audioIds: string[]): Promise<ParticipantSession>;
-  getSession(participantId: string): Promise<ParticipantSession | undefined>;
-  updateSession(session: ParticipantSession): Promise<ParticipantSession>;
+  // Analytics methods
+  getResponseStatsByAudioSnippet(audioSnippetId: number): Promise<ResponseStats | undefined>;
+  getAllResponseStats(): Promise<ResponseStats[]>;
+  getRandomAudioSnippetsForEvaluation(count: number): Promise<AudioSnippetWithStats[]>;
 }
 
+// In-memory storage implementation
 export class MemStorage implements IStorage {
-  private users: Map<number, User>;
+  private admins: Map<number, Admin>;
+  private audioSnippets: Map<number, AudioSnippet>;
   private participants: Map<number, Participant>;
-  private audioFiles: Map<number, AudioFile>;
   private responses: Map<number, Response>;
-  private sessions: Map<string, ParticipantSession>;
   
-  private userIdCounter: number;
-  private participantIdCounter: number;
-  private audioFileIdCounter: number;
-  private responseIdCounter: number;
-
+  private adminCurrentId: number;
+  private audioSnippetCurrentId: number;
+  private participantCurrentId: number;
+  private responseCurrentId: number;
+  
   constructor() {
-    this.users = new Map();
+    this.admins = new Map();
+    this.audioSnippets = new Map();
     this.participants = new Map();
-    this.audioFiles = new Map();
     this.responses = new Map();
-    this.sessions = new Map();
     
-    this.userIdCounter = 1;
-    this.participantIdCounter = 1;
-    this.audioFileIdCounter = 1;
-    this.responseIdCounter = 1;
-
-    // Add an admin user by default
-    this.createUser({
+    this.adminCurrentId = 1;
+    this.audioSnippetCurrentId = 1;
+    this.participantCurrentId = 1;
+    this.responseCurrentId = 1;
+    
+    // Create default admin user
+    this.createAdmin({
       username: "admin",
-      password: "admin123", // In a real application, this would be hashed
-      isAdmin: 1
+      password: "password" // In a real app, this would be hashed
     });
   }
-
-  // User operations
-  async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username
+  
+  // Admin methods
+  async getAdminByUsername(username: string): Promise<Admin | undefined> {
+    return Array.from(this.admins.values()).find(
+      (admin) => admin.username === username
     );
   }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userIdCounter++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  
+  async createAdmin(insertAdmin: InsertAdmin): Promise<Admin> {
+    const id = this.adminCurrentId++;
+    const admin: Admin = { ...insertAdmin, id };
+    this.admins.set(id, admin);
+    return admin;
   }
-
-  // Participant operations
-  async getParticipant(id: number): Promise<Participant | undefined> {
+  
+  // Audio snippet methods
+  async createAudioSnippet(snippet: InsertAudioSnippet): Promise<AudioSnippet> {
+    const id = this.audioSnippetCurrentId++;
+    const audioSnippet: AudioSnippet = { 
+      ...snippet, 
+      id,
+      uploadDate: new Date() 
+    };
+    this.audioSnippets.set(id, audioSnippet);
+    return audioSnippet;
+  }
+  
+  async getAudioSnippetById(id: number): Promise<AudioSnippet | undefined> {
+    return this.audioSnippets.get(id);
+  }
+  
+  async getAllAudioSnippets(): Promise<AudioSnippet[]> {
+    return Array.from(this.audioSnippets.values()).sort((a, b) => 
+      b.uploadDate.getTime() - a.uploadDate.getTime()
+    );
+  }
+  
+  async deleteAudioSnippet(id: number): Promise<boolean> {
+    return this.audioSnippets.delete(id);
+  }
+  
+  // Participant methods
+  async createParticipant(participant: InsertParticipant): Promise<Participant> {
+    const id = this.participantCurrentId++;
+    const sessionId = participant.sessionId || nanoid(8);
+    const newParticipant: Participant = { 
+      ...participant,
+      id,
+      sessionId,
+      sessionName: participant.sessionName || null,
+      createDate: new Date() 
+    };
+    this.participants.set(id, newParticipant);
+    return newParticipant;
+  }
+  
+  async getParticipantBySessionId(sessionId: string): Promise<Participant | undefined> {
+    return Array.from(this.participants.values()).find(
+      (participant) => participant.sessionId === sessionId
+    );
+  }
+  
+  async getParticipantById(id: number): Promise<Participant | undefined> {
     return this.participants.get(id);
   }
-
-  async getParticipantById(participantId: string): Promise<Participant | undefined> {
-    return Array.from(this.participants.values()).find(
-      (participant) => participant.participantId === participantId
+  
+  async getAllParticipants(): Promise<Participant[]> {
+    return Array.from(this.participants.values());
+  }
+  
+  // Response methods
+  async createResponse(response: InsertResponse): Promise<Response> {
+    const id = this.responseCurrentId++;
+    const newResponse: Response = { 
+      ...response, 
+      id, 
+      responseDate: new Date() 
+    };
+    this.responses.set(id, newResponse);
+    return newResponse;
+  }
+  
+  async getResponsesByParticipantId(participantId: number): Promise<Response[]> {
+    return Array.from(this.responses.values()).filter(
+      (response) => response.participantId === participantId
     );
   }
-
-  async createParticipant(insertParticipant: InsertParticipant): Promise<Participant> {
-    const id = this.participantIdCounter++;
-    const createdAt = new Date();
-    const participant: Participant = { ...insertParticipant, id, createdAt };
-    this.participants.set(id, participant);
-    return participant;
-  }
-
-  // Audio file operations
-  async getAudioFile(id: number): Promise<AudioFile | undefined> {
-    return this.audioFiles.get(id);
-  }
-
-  async getAudioFileById(audioId: string): Promise<AudioFile | undefined> {
-    return Array.from(this.audioFiles.values()).find(
-      (audioFile) => audioFile.audioId === audioId
+  
+  async getResponsesByAudioSnippetId(audioSnippetId: number): Promise<Response[]> {
+    return Array.from(this.responses.values()).filter(
+      (response) => response.audioSnippetId === audioSnippetId
     );
   }
-
-  async getAudioFiles(): Promise<AudioFile[]> {
-    return Array.from(this.audioFiles.values()).sort((a, b) => {
-      // Sort by uploadedAt descending (newest first)
-      return b.uploadedAt.getTime() - a.uploadedAt.getTime();
-    });
-  }
-
-  async createAudioFile(insertAudioFile: InsertAudioFile): Promise<AudioFile> {
-    const id = this.audioFileIdCounter++;
-    const uploadedAt = new Date();
-    const audioFile: AudioFile = { ...insertAudioFile, id, uploadedAt };
-    this.audioFiles.set(id, audioFile);
-    return audioFile;
-  }
-
-  async deleteAudioFile(audioId: string): Promise<boolean> {
-    const audioFileEntry = Array.from(this.audioFiles.entries()).find(
-      ([_, audioFile]) => audioFile.audioId === audioId
-    );
-    
-    if (!audioFileEntry) {
-      return false;
-    }
-    
-    const [id] = audioFileEntry;
-    return this.audioFiles.delete(id);
-  }
-
-  // Response operations
-  async getResponse(id: number): Promise<Response | undefined> {
-    return this.responses.get(id);
-  }
-
-  async createResponse(insertResponse: InsertResponse): Promise<Response> {
-    const id = this.responseIdCounter++;
-    const timestamp = new Date();
-    const response: Response = { ...insertResponse, id, timestamp };
-    this.responses.set(id, response);
-    return response;
-  }
-
-  async getResponsesByParticipant(participantId: string): Promise<Response[]> {
-    return Array.from(this.responses.values())
-      .filter((response) => response.participantId === participantId)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  }
-
-  async getResponsesByAudio(audioId: string): Promise<Response[]> {
-    return Array.from(this.responses.values())
-      .filter((response) => response.audioId === audioId)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  }
-
+  
   async getAllResponses(): Promise<Response[]> {
-    return Array.from(this.responses.values())
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    return Array.from(this.responses.values());
   }
-
-  // Application-specific operations
-  async getRandomAudioIdsForSession(count: number): Promise<string[]> {
-    const allAudios = await this.getAudioFiles();
+  
+  // Analytics methods
+  async getResponseStatsByAudioSnippet(audioSnippetId: number): Promise<ResponseStats | undefined> {
+    const audioSnippet = await this.getAudioSnippetById(audioSnippetId);
+    if (!audioSnippet) return undefined;
     
-    if (allAudios.length <= count) {
-      return allAudios.map(audio => audio.audioId);
-    }
-    
-    // Shuffle and pick random audios
-    const shuffled = [...allAudios].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count).map(audio => audio.audioId);
-  }
-
-  async getAudioStats(audioId: string): Promise<AudioStats> {
-    const responses = await this.getResponsesByAudio(audioId);
+    const responses = await this.getResponsesByAudioSnippetId(audioSnippetId);
     const totalResponses = responses.length;
     
     if (totalResponses === 0) {
       return {
+        audioSnippetId,
+        filename: audioSnippet.filename,
+        originalName: audioSnippet.originalName,
+        totalResponses: 0,
+        coughCount: 0,
+        throatClearCount: 0,
+        otherCount: 0,
         coughPercentage: 0,
         throatClearPercentage: 0,
-        otherPercentage: 0,
-        totalResponses: 0
+        otherPercentage: 0
       };
     }
     
-    const coughCount = responses.filter(r => r.selection === 'cough').length;
-    const throatClearCount = responses.filter(r => r.selection === 'throat-clear').length;
-    const otherCount = responses.filter(r => r.selection === 'other').length;
+    const coughCount = responses.filter(r => r.selectedOption === "cough").length;
+    const throatClearCount = responses.filter(r => r.selectedOption === "throat-clear").length;
+    const otherCount = responses.filter(r => r.selectedOption === "other").length;
     
     return {
+      audioSnippetId,
+      filename: audioSnippet.filename,
+      originalName: audioSnippet.originalName,
+      totalResponses,
+      coughCount,
+      throatClearCount,
+      otherCount,
       coughPercentage: Math.round((coughCount / totalResponses) * 100),
       throatClearPercentage: Math.round((throatClearCount / totalResponses) * 100),
-      otherPercentage: Math.round((otherCount / totalResponses) * 100),
-      totalResponses
+      otherPercentage: Math.round((otherCount / totalResponses) * 100)
     };
   }
-
-  getRandomFeedback(): string {
-    return humorousFeedback[Math.floor(Math.random() * humorousFeedback.length)];
-  }
-
-  // Session management
-  async createSession(participantId: string, audioIds: string[]): Promise<ParticipantSession> {
-    const session: ParticipantSession = {
-      participantId,
-      audioIds,
-      currentIndex: 0,
-      completed: false
-    };
+  
+  async getAllResponseStats(): Promise<ResponseStats[]> {
+    const audioSnippets = await this.getAllAudioSnippets();
+    const statsPromises = audioSnippets.map(snippet => 
+      this.getResponseStatsByAudioSnippet(snippet.id)
+    );
     
-    this.sessions.set(participantId, session);
-    return session;
+    const allStats = await Promise.all(statsPromises);
+    return allStats.filter((stat): stat is ResponseStats => stat !== undefined);
   }
-
-  async getSession(participantId: string): Promise<ParticipantSession | undefined> {
-    return this.sessions.get(participantId);
-  }
-
-  async updateSession(session: ParticipantSession): Promise<ParticipantSession> {
-    this.sessions.set(session.participantId, session);
-    return session;
+  
+  async getRandomAudioSnippetsForEvaluation(count: number): Promise<AudioSnippetWithStats[]> {
+    const allSnippets = await this.getAllAudioSnippets();
+    
+    // If we don't have enough snippets, return what we have
+    if (allSnippets.length <= count) {
+      const snippetsWithStats = await Promise.all(
+        allSnippets.map(async (snippet) => {
+          const stats = await this.getResponseStatsByAudioSnippet(snippet.id);
+          return {
+            ...snippet,
+            stats: stats ? {
+              coughPercentage: stats.coughPercentage,
+              throatClearPercentage: stats.throatClearPercentage,
+              otherPercentage: stats.otherPercentage,
+              totalResponses: stats.totalResponses
+            } : undefined
+          };
+        })
+      );
+      return snippetsWithStats;
+    }
+    
+    // Randomly select 'count' snippets
+    const shuffled = [...allSnippets].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, count);
+    
+    // Add stats to the selected snippets
+    const snippetsWithStats = await Promise.all(
+      selected.map(async (snippet) => {
+        const stats = await this.getResponseStatsByAudioSnippet(snippet.id);
+        return {
+          ...snippet,
+          stats: stats ? {
+            coughPercentage: stats.coughPercentage,
+            throatClearPercentage: stats.throatClearPercentage,
+            otherPercentage: stats.otherPercentage,
+            totalResponses: stats.totalResponses
+          } : undefined
+        };
+      })
+    );
+    
+    return snippetsWithStats;
   }
 }
 

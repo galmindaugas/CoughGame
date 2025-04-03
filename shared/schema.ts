@@ -1,101 +1,116 @@
-import { pgTable, text, serial, integer, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, json, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// User/Admin table
-export const users = pgTable("users", {
+// Admin user table
+export const admins = pgTable("admins", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
-  isAdmin: integer("is_admin").default(0).notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
+export const insertAdminSchema = createInsertSchema(admins).pick({
   username: true,
   password: true,
-  isAdmin: true,
 });
 
-// Participants (QR code users)
-export const participants = pgTable("participants", {
+// Audio snippets table
+export const audioSnippets = pgTable("audio_snippets", {
   id: serial("id").primaryKey(),
-  participantId: varchar("participant_id", { length: 50 }).notNull().unique(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const insertParticipantSchema = createInsertSchema(participants).pick({
-  participantId: true,
-});
-
-// Audio files table
-export const audioFiles = pgTable("audio_files", {
-  id: serial("id").primaryKey(),
-  audioId: varchar("audio_id", { length: 50 }).notNull().unique(),
   filename: text("filename").notNull(),
   originalName: text("original_name").notNull(),
-  duration: integer("duration").notNull(), // duration in milliseconds
-  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  mimeType: text("mime_type").notNull(),
+  duration: integer("duration").notNull(), // Duration in milliseconds
+  uploadDate: timestamp("upload_date").defaultNow().notNull(),
 });
 
-export const insertAudioFileSchema = createInsertSchema(audioFiles).pick({
-  audioId: true,
-  filename: true,
+export const insertAudioSnippetSchema = createInsertSchema(audioSnippets).pick({
+  filename: true, 
   originalName: true,
+  mimeType: true,
   duration: true,
 });
 
-// Responses table (to store participant evaluations)
+// Participants (users) table
+export const participants = pgTable("participants", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull().unique(), // Generated unique identifier for QR code
+  sessionName: text("session_name"), // Optional grouping name
+  createDate: timestamp("create_date").defaultNow().notNull(),
+});
+
+export const insertParticipantSchema = createInsertSchema(participants).pick({
+  sessionId: true,
+  sessionName: true,
+});
+
+// Responses table for participant evaluations
 export const responses = pgTable("responses", {
   id: serial("id").primaryKey(),
-  participantId: varchar("participant_id", { length: 50 }).references(() => participants.participantId).notNull(),
-  audioId: varchar("audio_id", { length: 50 }).references(() => audioFiles.audioId).notNull(),
-  selection: varchar("selection", { length: 20 }).notNull(), // "cough", "throat-clear", or "other"
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  participantId: integer("participant_id").notNull(), // Foreign key to participants
+  audioSnippetId: integer("audio_snippet_id").notNull(), // Foreign key to audioSnippets
+  selectedOption: text("selected_option").notNull(), // "cough", "throat-clear", "other"
+  responseDate: timestamp("response_date").defaultNow().notNull(),
 });
 
 export const insertResponseSchema = createInsertSchema(responses).pick({
   participantId: true,
-  audioId: true,
-  selection: true,
+  audioSnippetId: true,
+  selectedOption: true,
 });
 
-// Types
-export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
+// Define response options type for consistent usage
+export const responseOptions = ["cough", "throat-clear", "other"] as const;
+export const ResponseOptionEnum = z.enum(responseOptions);
+export type ResponseOption = typeof responseOptions[number];
+
+// Export type definitions for use in application
+export type Admin = typeof admins.$inferSelect;
+export type InsertAdmin = z.infer<typeof insertAdminSchema>;
+
+export type AudioSnippet = typeof audioSnippets.$inferSelect;
+export type InsertAudioSnippet = z.infer<typeof insertAudioSnippetSchema>;
 
 export type Participant = typeof participants.$inferSelect;
 export type InsertParticipant = z.infer<typeof insertParticipantSchema>;
 
-export type AudioFile = typeof audioFiles.$inferSelect;
-export type InsertAudioFile = z.infer<typeof insertAudioFileSchema>;
-
 export type Response = typeof responses.$inferSelect;
 export type InsertResponse = z.infer<typeof insertResponseSchema>;
 
-// Custom types for the application
-export type AudioStats = {
+// Define statistics type for response aggregation
+export type ResponseStats = {
+  audioSnippetId: number;
+  filename: string;
+  originalName: string;
+  totalResponses: number;
+  coughCount: number;
+  throatClearCount: number;
+  otherCount: number;
   coughPercentage: number;
   throatClearPercentage: number;
   otherPercentage: number;
-  totalResponses: number;
 };
 
-export type ParticipantSession = {
-  participantId: string;
-  audioIds: string[];
-  currentIndex: number;
-  completed: boolean;
+// Define audio snippet with stats for participant evaluation
+export type AudioSnippetWithStats = AudioSnippet & {
+  stats?: {
+    coughPercentage: number;
+    throatClearPercentage: number;
+    otherPercentage: number;
+    totalResponses: number;
+  }
 };
 
-export const humorousFeedback = [
+// Funny feedback messages for participants
+export const feedbackMessages = [
   "Tricky, isn't it? Even experts argue about this one!",
-  "That's a challenging one! Some professors have heated debates over this sound.",
-  "Hmm, interesting choice! Did you know this sound confuses many specialists?",
-  "Good ear! This is one of those sounds that keeps researchers up at night.",
-  "Well done! That's a sound that often divides the cough conference attendees.",
-  "Fascinating, right? This sound has characteristics that overlap categories.",
-  "That was a tough one! It has elements that make classification challenging.",
-  "Nice job! This sample shows why we need your expert ears to help us.",
-  "Interesting classification! This type of sound is why we're doing this research.",
-  "Great work! This is exactly the kind of ambiguous sound we're studying."
+  "Hmm, that was a challenging sound to identify!",
+  "Are you sure? Just kidding, there's no right answer!",
+  "Did you know coughs can be as unique as fingerprints?",
+  "That's a tough one! It's like the 'Yanny or Laurel' of respiratory sounds.",
+  "Interesting choice! The world of respiratory sounds is complex.",
+  "Your ears are being put to the test today!",
+  "That's the kind of sound that divides opinion at cough conferences!",
+  "Trust your ears - they're surprisingly good at this!",
+  "This one keeps our research team debating too!"
 ];

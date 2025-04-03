@@ -1,389 +1,419 @@
-import type { Express, Request, Response } from "express";
+import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import crypto from "crypto";
-import { insertAudioFileSchema, insertParticipantSchema, insertResponseSchema } from "@shared/schema";
+import { fileURLToPath } from "url";
+import { 
+  insertAudioSnippetSchema, 
+  insertParticipantSchema, 
+  insertResponseSchema,
+  ResponseOptionEnum
+} from "@shared/schema";
 import { z } from "zod";
-import session from "express-session";
-import MemoryStore from "memorystore";
+import { nanoid } from "nanoid";
+import QRCode from "qrcode";
+import express from "express";
 
-// Configure upload directory
-const uploadsDir = path.join(process.cwd(), "uploads");
+// Create uploads directory if it doesn't exist
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDir = path.join(__dirname, "..", "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
 // Configure multer for file uploads
 const storage_config = multer.diskStorage({
-  destination: function (req, file, cb) {
+  destination: function (_req, _file, cb) {
     cb(null, uploadsDir);
   },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = crypto.randomBytes(10).toString("hex");
-    const ext = path.extname(file.originalname);
-    cb(null, `audio-${uniqueSuffix}${ext}`);
-  }
+  filename: function (_req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
 });
 
-const upload = multer({
+const upload = multer({ 
   storage: storage_config,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB max file size
-  },
-  fileFilter: function (req, file, cb) {
-    const allowedTypes = [".mp3", ".wav"];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedTypes.includes(ext)) {
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (_req, file, cb) => {
+    // Accept only audio files (mp3, wav)
+    if (file.mimetype === "audio/mpeg" || file.mimetype === "audio/wav") {
       cb(null, true);
     } else {
-      cb(new Error("Only .mp3 and .wav files are allowed"));
+      cb(new Error("Only .mp3 and .wav files are allowed!"));
     }
-  }
+  },
+});
+
+// Login schema
+const loginSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+});
+
+// QR Code generation schema
+const qrGenerationSchema = z.object({
+  count: z.number().int().min(1).max(100),
+  sessionName: z.string().optional(),
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Session configuration
-  const MemoryStoreSession = MemoryStore(session);
-  app.use(session({
-    secret: process.env.SESSION_SECRET || "cough-eval-secret",
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === "production", maxAge: 24 * 60 * 60 * 1000 },
-    store: new MemoryStoreSession({
-      checkPeriod: 86400000 // prune expired entries every 24h
-    })
-  }));
-
-  // Authentication middleware
-  const requireAuth = (req: Request, res: Response, next: Function) => {
-    if (!req.session.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    next();
-  };
-
-  const requireAdmin = (req: Request, res: Response, next: Function) => {
-    if (!req.session.user || req.session.user.isAdmin !== 1) {
-      return res.status(403).json({ message: "Forbidden" });
-    }
-    next();
-  };
-
-  // Auth routes
-  app.post("/api/login", async (req, res) => {
+  // Serve uploaded files
+  app.use("/api/uploads", express.static(uploadsDir));
+  
+  // API routes
+  
+  // Admin authentication
+  app.post("/api/auth/login", async (req, res) => {
     try {
-      const { username, password } = req.body;
-      if (!username || !password) {
-        return res.status(400).json({ message: "Username and password are required" });
+      const validation = loginSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: "Invalid request data", errors: validation.error.errors });
       }
-
-      const user = await storage.getUserByUsername(username);
-      if (!user || user.password !== password) { // In a real app, we'd use bcrypt
+      
+      const { username, password } = validation.data;
+      const admin = await storage.getAdminByUsername(username);
+      
+      if (!admin || admin.password !== password) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
-
-      req.session.user = {
-        id: user.id,
-        username: user.username,
-        isAdmin: user.isAdmin
-      };
-
-      return res.json({ 
-        id: user.id, 
-        username: user.username, 
-        isAdmin: user.isAdmin 
+      
+      // In a real app, we would set a session/JWT token here
+      return res.status(200).json({ 
+        success: true, 
+        message: "Login successful",
+        admin: { id: admin.id, username: admin.username }
       });
     } catch (error) {
       console.error("Login error:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      return res.status(500).json({ message: "An error occurred during login" });
     }
   });
-
-  app.post("/api/logout", (req, res) => {
-    req.session.destroy((err) => {
-      if (err) {
-        return res.status(500).json({ message: "Error logging out" });
-      }
-      res.clearCookie("connect.sid");
-      return res.json({ message: "Logged out successfully" });
-    });
-  });
-
-  app.get("/api/user", (req, res) => {
-    if (!req.session.user) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-    return res.json(req.session.user);
-  });
-
-  // Audio file management routes
-  app.post("/api/audio", requireAdmin, upload.single("file"), async (req, res) => {
+  
+  // Audio snippet upload
+  app.post("/api/audio", upload.single("audio"), async (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded" });
+        return res.status(400).json({ message: "No file was uploaded" });
       }
-
-      // Generate unique ID for the audio
-      const audioId = `audio_${crypto.randomBytes(4).toString("hex")}`;
       
-      // For demonstration, we'll use a fixed duration
-      // In a real app, we'd use audio metadata to get actual duration
-      const duration = 5000; // 5 seconds in milliseconds
+      // Get audio file duration (in a real app we would use a library like music-metadata)
+      const duration = 5000; // Placeholder duration of 5 seconds (5000ms)
       
-      const audioFileData = {
-        audioId,
+      const audioData = {
         filename: req.file.filename,
         originalName: req.file.originalname,
-        duration
+        mimeType: req.file.mimetype,
+        duration: duration,
       };
-
-      const validatedData = insertAudioFileSchema.parse(audioFileData);
-      const audioFile = await storage.createAudioFile(validatedData);
       
-      return res.status(201).json(audioFile);
-    } catch (error) {
-      console.error("Upload error:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid data format", errors: error.errors });
-      }
-      return res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.get("/api/audio", requireAdmin, async (req, res) => {
-    try {
-      const audioFiles = await storage.getAudioFiles();
-      return res.json(audioFiles);
-    } catch (error) {
-      console.error("Error fetching audio files:", error);
-      return res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.get("/api/audio/:audioId", async (req, res) => {
-    try {
-      const { audioId } = req.params;
-      const audioFile = await storage.getAudioFileById(audioId);
-      
-      if (!audioFile) {
-        return res.status(404).json({ message: "Audio file not found" });
+      const validation = insertAudioSnippetSchema.safeParse(audioData);
+      if (!validation.success) {
+        // Delete the uploaded file if validation fails
+        fs.unlinkSync(path.join(uploadsDir, req.file.filename));
+        return res.status(400).json({ message: "Invalid audio data", errors: validation.error.errors });
       }
       
-      const filePath = path.join(uploadsDir, audioFile.filename);
-      return res.sendFile(filePath);
+      const audioSnippet = await storage.createAudioSnippet(validation.data);
+      return res.status(201).json(audioSnippet);
     } catch (error) {
-      console.error("Error serving audio file:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      console.error("Audio upload error:", error);
+      if (req.file) {
+        // Clean up the file if there was an error
+        fs.unlinkSync(path.join(uploadsDir, req.file.filename));
+      }
+      return res.status(500).json({ message: "Error uploading audio file" });
     }
   });
-
-  app.delete("/api/audio/:audioId", requireAdmin, async (req, res) => {
+  
+  // Get all audio snippets
+  app.get("/api/audio", async (_req, res) => {
     try {
-      const { audioId } = req.params;
-      const audioFile = await storage.getAudioFileById(audioId);
-      
-      if (!audioFile) {
-        return res.status(404).json({ message: "Audio file not found" });
+      const audioSnippets = await storage.getAllAudioSnippets();
+      return res.status(200).json(audioSnippets);
+    } catch (error) {
+      console.error("Error fetching audio snippets:", error);
+      return res.status(500).json({ message: "Error fetching audio snippets" });
+    }
+  });
+  
+  // Delete audio snippet
+  app.delete("/api/audio/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID format" });
       }
       
-      // Delete the actual file
-      const filePath = path.join(uploadsDir, audioFile.filename);
+      const audioSnippet = await storage.getAudioSnippetById(id);
+      if (!audioSnippet) {
+        return res.status(404).json({ message: "Audio snippet not found" });
+      }
+      
+      // Delete the file from the filesystem
+      const filePath = path.join(uploadsDir, audioSnippet.filename);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
       
-      // Delete from storage
-      await storage.deleteAudioFile(audioId);
-      return res.json({ message: "Audio file deleted successfully" });
+      await storage.deleteAudioSnippet(id);
+      return res.status(200).json({ message: "Audio snippet deleted successfully" });
     } catch (error) {
-      console.error("Error deleting audio file:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      console.error("Error deleting audio snippet:", error);
+      return res.status(500).json({ message: "Error deleting audio snippet" });
     }
   });
-
-  // Participant routes
-  app.post("/api/participants", async (req, res) => {
+  
+  // Generate QR codes for participants
+  app.post("/api/participants/generate", async (req, res) => {
     try {
-      const prefix = req.body.prefix || "CONF";
-      const participantId = `${prefix}_${crypto.randomBytes(4).toString("hex")}`;
-      
-      const participantData = {
-        participantId
-      };
-      
-      const validatedData = insertParticipantSchema.parse(participantData);
-      const participant = await storage.createParticipant(validatedData);
-      
-      // Create a session with 5 random audio files
-      const audioIds = await storage.getRandomAudioIdsForSession(5);
-      if (audioIds.length === 0) {
-        return res.status(400).json({ message: "No audio files available for evaluation" });
+      const validation = qrGenerationSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: "Invalid request data", errors: validation.error.errors });
       }
       
-      await storage.createSession(participantId, audioIds);
-      
-      return res.status(201).json(participant);
-    } catch (error) {
-      console.error("Error creating participant:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid data format", errors: error.errors });
-      }
-      return res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.get("/api/participants/batch", requireAdmin, async (req, res) => {
-    try {
-      const count = parseInt(req.query.count as string) || 1;
-      const prefix = req.query.prefix as string || "CONF";
-      
-      if (count < 1 || count > 100) {
-        return res.status(400).json({ message: "Count must be between 1 and 100" });
-      }
-      
+      const { count, sessionName } = validation.data;
       const participants = [];
+      
       for (let i = 0; i < count; i++) {
-        const participantId = `${prefix}_${crypto.randomBytes(4).toString("hex")}`;
-        const participantData = { participantId };
-        const validatedData = insertParticipantSchema.parse(participantData);
-        const participant = await storage.createParticipant(validatedData);
-        participants.push(participant);
+        const sessionId = nanoid(8);
+        const participant = await storage.createParticipant({
+          sessionId,
+          sessionName: sessionName || null,
+        });
+        
+        // Generate QR code data URL
+        const baseUrl = process.env.BASE_URL || `http://${req.headers.host}`;
+        const evaluationUrl = `${baseUrl}/evaluate/${sessionId}`;
+        const qrCodeDataUrl = await QRCode.toDataURL(evaluationUrl);
+        
+        participants.push({
+          ...participant,
+          qrCode: qrCodeDataUrl,
+          evaluationUrl
+        });
       }
       
       return res.status(201).json(participants);
     } catch (error) {
-      console.error("Error creating batch participants:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      console.error("Error generating QR codes:", error);
+      return res.status(500).json({ message: "Error generating QR codes" });
     }
   });
-
-  // Evaluation session routes
-  app.get("/api/sessions/:participantId", async (req, res) => {
+  
+  // Get all participants
+  app.get("/api/participants", async (_req, res) => {
     try {
-      const { participantId } = req.params;
+      const participants = await storage.getAllParticipants();
+      return res.status(200).json(participants);
+    } catch (error) {
+      console.error("Error fetching participants:", error);
+      return res.status(500).json({ message: "Error fetching participants" });
+    }
+  });
+  
+  // Get participant by session ID
+  app.get("/api/participants/:sessionId", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const participant = await storage.getParticipantBySessionId(sessionId);
       
-      // Check if participant exists
-      const participant = await storage.getParticipantById(participantId);
       if (!participant) {
         return res.status(404).json({ message: "Participant not found" });
       }
       
-      // Get or create a session
-      let session = await storage.getSession(participantId);
-      if (!session) {
-        const audioIds = await storage.getRandomAudioIdsForSession(5);
-        if (audioIds.length === 0) {
-          return res.status(400).json({ message: "No audio files available for evaluation" });
-        }
-        
-        session = await storage.createSession(participantId, audioIds);
+      return res.status(200).json(participant);
+    } catch (error) {
+      console.error("Error fetching participant:", error);
+      return res.status(500).json({ message: "Error fetching participant" });
+    }
+  });
+  
+  // Get random audio snippets for evaluation
+  app.get("/api/evaluation/:sessionId", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const participant = await storage.getParticipantBySessionId(sessionId);
+      
+      if (!participant) {
+        return res.status(404).json({ message: "Participant not found" });
       }
       
-      // Get current audio details
-      const currentAudioId = session.audioIds[session.currentIndex];
-      const audioFile = await storage.getAudioFileById(currentAudioId);
+      // Get 5 random audio snippets with their stats
+      const audioSnippets = await storage.getRandomAudioSnippetsForEvaluation(5);
       
-      if (!audioFile) {
-        return res.status(404).json({ message: "Audio file not found" });
-      }
+      // Check if participant has already responded to these snippets
+      const existingResponses = await storage.getResponsesByParticipantId(participant.id);
+      const existingAudioIds = new Set(existingResponses.map(r => r.audioSnippetId));
       
-      return res.json({
-        session,
-        currentAudio: {
-          audioId: currentAudioId,
-          duration: audioFile.duration
-        },
-        totalSteps: session.audioIds.length,
-        currentStep: session.currentIndex + 1
+      // For each audio snippet, check if this participant has already responded
+      const snippetsWithStatus = audioSnippets.map(snippet => ({
+        ...snippet,
+        hasResponded: existingAudioIds.has(snippet.id)
+      }));
+      
+      return res.status(200).json({
+        participant,
+        audioSnippets: snippetsWithStatus
       });
     } catch (error) {
-      console.error("Error fetching session:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      console.error("Error fetching evaluation data:", error);
+      return res.status(500).json({ message: "Error fetching evaluation data" });
     }
   });
-
-  // Submit response route
+  
+  // Submit response to audio snippet
   app.post("/api/responses", async (req, res) => {
     try {
-      const { participantId, audioId, selection } = req.body;
+      const responseSchema = insertResponseSchema.extend({
+        sessionId: z.string(),
+        selectedOption: ResponseOptionEnum,
+      });
       
-      if (!participantId || !audioId || !selection) {
-        return res.status(400).json({ message: "Missing required fields" });
+      const validationResult = responseSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request data", errors: validationResult.error.errors });
       }
       
-      // Validate selection
-      if (!["cough", "throat-clear", "other"].includes(selection)) {
-        return res.status(400).json({ message: "Invalid selection" });
-      }
+      const { sessionId, audioSnippetId, selectedOption } = validationResult.data;
       
-      // Check if participant exists
-      const participant = await storage.getParticipantById(participantId);
+      // Get participant by session ID
+      const participant = await storage.getParticipantBySessionId(sessionId);
       if (!participant) {
         return res.status(404).json({ message: "Participant not found" });
       }
       
-      // Check if audio exists
-      const audioFile = await storage.getAudioFileById(audioId);
-      if (!audioFile) {
-        return res.status(404).json({ message: "Audio file not found" });
+      // Check if audio snippet exists
+      const audioSnippet = await storage.getAudioSnippetById(audioSnippetId);
+      if (!audioSnippet) {
+        return res.status(404).json({ message: "Audio snippet not found" });
       }
       
-      // Save the response
-      const responseData = {
-        participantId,
-        audioId,
-        selection
-      };
+      // Check if participant has already responded to this audio snippet
+      const existingResponses = await storage.getResponsesByParticipantId(participant.id);
+      const hasResponded = existingResponses.some(r => r.audioSnippetId === audioSnippetId);
       
-      const validatedData = insertResponseSchema.parse(responseData);
-      const response = await storage.createResponse(validatedData);
-      
-      // Get stats for this audio
-      const stats = await storage.getAudioStats(audioId);
-      
-      // Get random feedback
-      const feedback = storage.getRandomFeedback();
-      
-      // Update session
-      const session = await storage.getSession(participantId);
-      if (session) {
-        session.currentIndex += 1;
-        if (session.currentIndex >= session.audioIds.length) {
-          session.completed = true;
-        }
-        await storage.updateSession(session);
+      if (hasResponded) {
+        return res.status(400).json({ message: "Participant has already responded to this audio snippet" });
       }
+      
+      // Create response
+      const response = await storage.createResponse({
+        participantId: participant.id,
+        audioSnippetId,
+        selectedOption,
+      });
+      
+      // Get updated stats for this audio snippet
+      const stats = await storage.getResponseStatsByAudioSnippet(audioSnippetId);
       
       return res.status(201).json({
         response,
-        stats,
-        feedback,
-        sessionComplete: session?.completed || false
+        stats
       });
     } catch (error) {
       console.error("Error submitting response:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid data format", errors: error.errors });
-      }
-      return res.status(500).json({ message: "Internal server error" });
+      return res.status(500).json({ message: "Error submitting response" });
     }
   });
-
+  
   // Get all responses
-  app.get("/api/responses", requireAdmin, async (req, res) => {
+  app.get("/api/responses", async (req, res) => {
     try {
       const responses = await storage.getAllResponses();
-      return res.json(responses);
+      
+      // If there are query parameters for filtering
+      const { audioId, responseType, date } = req.query;
+      
+      let filteredResponses = responses;
+      
+      if (audioId && typeof audioId === 'string') {
+        const audioIdNum = parseInt(audioId);
+        if (!isNaN(audioIdNum)) {
+          filteredResponses = filteredResponses.filter(r => r.audioSnippetId === audioIdNum);
+        }
+      }
+      
+      if (responseType && typeof responseType === 'string') {
+        filteredResponses = filteredResponses.filter(r => r.selectedOption === responseType);
+      }
+      
+      if (date && typeof date === 'string') {
+        const filterDate = new Date(date);
+        if (!isNaN(filterDate.getTime())) {
+          filteredResponses = filteredResponses.filter(r => {
+            const responseDate = new Date(r.responseDate);
+            return responseDate.toDateString() === filterDate.toDateString();
+          });
+        }
+      }
+      
+      // Expand each response with audio and participant data
+      const expandedResponses = await Promise.all(
+        filteredResponses.map(async (response) => {
+          const audioSnippet = await storage.getAudioSnippetById(response.audioSnippetId);
+          const participant = await storage.getParticipantById(response.participantId);
+          
+          return {
+            ...response,
+            audioSnippet,
+            participant,
+          };
+        })
+      );
+      
+      return res.status(200).json(expandedResponses);
     } catch (error) {
       console.error("Error fetching responses:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      return res.status(500).json({ message: "Error fetching responses" });
     }
   });
-
-  // Create HTTP server
+  
+  // Get response statistics
+  app.get("/api/stats", async (_req, res) => {
+    try {
+      const stats = await storage.getAllResponseStats();
+      
+      // Calculate overall distribution
+      const allResponses = await storage.getAllResponses();
+      const totalResponses = allResponses.length;
+      
+      let coughCount = 0;
+      let throatClearCount = 0;
+      let otherCount = 0;
+      
+      allResponses.forEach(response => {
+        if (response.selectedOption === "cough") {
+          coughCount++;
+        } else if (response.selectedOption === "throat-clear") {
+          throatClearCount++;
+        } else if (response.selectedOption === "other") {
+          otherCount++;
+        }
+      });
+      
+      const overallStats = {
+        totalResponses,
+        coughCount,
+        throatClearCount,
+        otherCount,
+        coughPercentage: totalResponses > 0 ? Math.round((coughCount / totalResponses) * 100) : 0,
+        throatClearPercentage: totalResponses > 0 ? Math.round((throatClearCount / totalResponses) * 100) : 0,
+        otherPercentage: totalResponses > 0 ? Math.round((otherCount / totalResponses) * 100) : 0,
+      };
+      
+      return res.status(200).json({
+        audioStats: stats,
+        overallStats
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      return res.status(500).json({ message: "Error fetching stats" });
+    }
+  });
+  
   const httpServer = createServer(app);
   return httpServer;
 }
