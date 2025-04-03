@@ -1,0 +1,63 @@
+You will create a simple, responsive web application for evaluating audio snippets as "cough," "throat clear," or "other," intended for participants at a cough conference. The web app should be built using React (frontend) and Node.js with Express and a lightweight database such as SQLite or MongoDB (backend). Host this app on Replit.
+
+Key Features:
+
+Admin Audio Upload Interface:
+
+A simple admin page accessible via a secured URL, allowing me to manually upload audio snippets (mp3 or wav, 2-10 seconds long).
+
+Each uploaded audio file is stored with a unique ID in the database.
+
+QR Code Generation:
+
+Generate unique QR codes for each new participant (user).
+
+When scanned, the QR code directs the user to a URL displaying the evaluation page in their phone browser.
+
+Participant Evaluation Interface:
+
+Each QR code URL serves a unique user session.
+
+The user sees a clean, mobile-friendly interface.
+
+Volume control slider available.
+
+The app randomly selects 5 distinct audio snippets from the database per user session.
+
+Plays audio snippets sequentially through the phone speaker.
+
+User Response Collection and Interactive Feedback:
+
+After each audio snippet plays, the user selects one option from three choices: "Cough," "Throat Clear," or "Other."
+
+Immediately after each selection, display the percentage of previous participants who selected each option for that specific snippet.
+
+Provide playful, humorous feedback alongside the percentage feedback, such as: "Tricky, isn't it? Even experts argue about this one!" to highlight ambiguity and encourage interaction.
+
+Responses are immediately stored in the database, associating the unique QR/user ID with each audio snippet ID and selected response.
+
+Data Storage & Analysis:
+
+Clearly structured database schema linking QR/user IDs, audio snippet IDs, and selections for future analysis.
+
+Admin interface (basic table view) displaying responses collected for verification purposes.
+
+Technical Requirements:
+
+React for frontend, using modern, simple, and responsive UI.
+
+Node.js with Express backend.
+
+QR code generation (library such as "qrcode").
+
+Audio playback controls (HTML5 audio API).
+
+Lightweight database solution, either SQLite (preferred) or MongoDB.
+
+The final deliverable:
+
+Fully functioning web app hosted on Replit.
+
+Clear documentation within the Replit project on how to upload new audio files, generate QR codes, and access the collected data.
+
+Ensure the app is intuitive and requires no special technical skills from conference participants.
