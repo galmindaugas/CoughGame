@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import multer from "multer";
@@ -15,6 +15,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import QRCode from "qrcode";
 import express from "express";
+import { setupAuth } from "./auth";
 
 // Create uploads directory if it doesn't exist
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -59,67 +60,27 @@ const qrGenerationSchema = z.object({
   sessionName: z.string().optional(),
 });
 
+// Authentication middleware
+const isAuthenticated = (req: Request, res: Response, next: NextFunction) => {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  return res.status(401).json({ message: "Unauthorized" });
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup authentication system
+  setupAuth(app);
+  
   // Serve uploaded files
   app.use("/api/uploads", express.static(uploadsDir));
   
   // API routes
   
-  // Admin authentication
-  app.post("/api/auth/login", async (req, res) => {
-    try {
-      const validation = loginSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ message: "Invalid request data", errors: validation.error.errors });
-      }
-      
-      const { username, password } = validation.data;
-      const admin = await storage.getAdminByUsername(username);
-      
-      if (!admin || admin.password !== password) {
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
-      
-      // In a real app, we would set a session/JWT token here
-      return res.status(200).json({ 
-        success: true, 
-        message: "Login successful",
-        admin: { id: admin.id, username: admin.username, isAdmin: 1 }
-      });
-    } catch (error) {
-      console.error("Login error:", error);
-      return res.status(500).json({ message: "An error occurred during login" });
-    }
-  });
+  // Authentication is now handled by setupAuth
   
-  // Check current authenticated user
-  app.get("/api/auth/check", async (req, res) => {
-    // This is a simple mock implementation
-    // In a real app, this would check session/JWT token
-    try {
-      // Just return success for demo purposes
-      // In a real app, we would check if the user is authenticated
-      return res.status(200).json({
-        success: true,
-        admin: { id: 1, username: "admin", isAdmin: 1 }
-      });
-    } catch (error) {
-      console.error("Auth check error:", error);
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-  });
-  
-  // Logout endpoint
-  app.post("/api/auth/logout", (_req, res) => {
-    // In a real app, we would invalidate the session/JWT token
-    return res.status(200).json({ 
-      success: true, 
-      message: "Logout successful" 
-    });
-  });
-  
-  // Audio snippet upload
-  app.post("/api/audio", upload.single("audio"), async (req, res) => {
+  // Audio snippet upload - protected route
+  app.post("/api/audio", isAuthenticated, upload.single("audio"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file was uploaded" });
@@ -165,8 +126,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Delete audio snippet
-  app.delete("/api/audio/:id", async (req, res) => {
+  // Delete audio snippet - protected route
+  app.delete("/api/audio/:id", isAuthenticated, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -192,8 +153,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Generate QR codes for participants
-  app.post("/api/participants/generate", async (req, res) => {
+  // Generate QR codes for participants - protected route
+  app.post("/api/participants/generate", isAuthenticated, async (req, res) => {
     try {
       const validation = qrGenerationSchema.safeParse(req.body);
       if (!validation.success) {
@@ -229,8 +190,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get all participants
-  app.get("/api/participants", async (_req, res) => {
+  // Get all participants - protected route
+  app.get("/api/participants", isAuthenticated, async (_req, res) => {
     try {
       const participants = await storage.getAllParticipants();
       return res.status(200).json(participants);
@@ -360,8 +321,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get all responses
-  app.get("/api/responses", async (req, res) => {
+  // Get all responses - protected route
+  app.get("/api/responses", isAuthenticated, async (req, res) => {
     try {
       const responses = await storage.getAllResponses();
       
@@ -412,8 +373,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get response statistics
-  app.get("/api/stats", async (_req, res) => {
+  // Get response statistics - protected route
+  app.get("/api/stats", isAuthenticated, async (_req, res) => {
     try {
       const stats = await storage.getAllResponseStats();
       

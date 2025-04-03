@@ -6,9 +6,13 @@ import {
 import { nanoid } from "nanoid";
 
 // Storage interface
+import session from "express-session";
+import createMemoryStore from "memorystore";
+
 export interface IStorage {
   // Admin methods
   getAdminByUsername(username: string): Promise<Admin | undefined>;
+  getAdminById(id: number): Promise<Admin | undefined>;
   createAdmin(admin: InsertAdmin): Promise<Admin>;
   
   // Audio snippet methods
@@ -33,6 +37,9 @@ export interface IStorage {
   getResponseStatsByAudioSnippet(audioSnippetId: number): Promise<ResponseStats | undefined>;
   getAllResponseStats(): Promise<ResponseStats[]>;
   getRandomAudioSnippetsForEvaluation(count: number): Promise<AudioSnippetWithStats[]>;
+  
+  // Session store for auth
+  sessionStore: session.Store;
 }
 
 // In-memory storage implementation
@@ -47,6 +54,9 @@ export class MemStorage implements IStorage {
   private participantCurrentId: number;
   private responseCurrentId: number;
   
+  // Session store for authentication
+  readonly sessionStore: session.Store;
+  
   constructor() {
     this.admins = new Map();
     this.audioSnippets = new Map();
@@ -57,6 +67,12 @@ export class MemStorage implements IStorage {
     this.audioSnippetCurrentId = 1;
     this.participantCurrentId = 1;
     this.responseCurrentId = 1;
+    
+    // Initialize session store
+    const MemoryStore = createMemoryStore(session);
+    this.sessionStore = new MemoryStore({
+      checkPeriod: 86400000, // prune expired entries every 24h
+    });
     
     // Create default admin user
     this.createAdmin({
@@ -70,6 +86,10 @@ export class MemStorage implements IStorage {
     return Array.from(this.admins.values()).find(
       (admin) => admin.username === username
     );
+  }
+  
+  async getAdminById(id: number): Promise<Admin | undefined> {
+    return this.admins.get(id);
   }
   
   async createAdmin(insertAdmin: InsertAdmin): Promise<Admin> {
