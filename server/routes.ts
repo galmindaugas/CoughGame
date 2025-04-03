@@ -349,14 +349,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let filteredResponses = responses;
       
-      if (audioId && typeof audioId === 'string') {
+      if (audioId && typeof audioId === 'string' && audioId !== 'all') {
         const audioIdNum = parseInt(audioId);
         if (!isNaN(audioIdNum)) {
           filteredResponses = filteredResponses.filter(r => r.audioSnippetId === audioIdNum);
         }
       }
       
-      if (responseType && typeof responseType === 'string') {
+      if (responseType && typeof responseType === 'string' && responseType !== 'all') {
         filteredResponses = filteredResponses.filter(r => r.selectedOption === responseType);
       }
       

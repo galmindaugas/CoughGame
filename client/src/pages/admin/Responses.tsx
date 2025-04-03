@@ -36,14 +36,33 @@ interface StatsData {
 }
 
 const Responses = () => {
-  const [filterAudioId, setFilterAudioId] = useState<string>("");
-  const [filterResponse, setFilterResponse] = useState<string>("");
+  const [filterAudioId, setFilterAudioId] = useState<string>("all");
+  const [filterResponse, setFilterResponse] = useState<string>("all");
   const [filterDate, setFilterDate] = useState<string>("");
   const { toast } = useToast();
 
+  // Prepare query parameters
+  const prepareQueryParams = () => {
+    const params = new URLSearchParams();
+    
+    if (filterAudioId !== "all") {
+      params.append("audioId", filterAudioId);
+    }
+    
+    if (filterResponse !== "all") {
+      params.append("responseType", filterResponse);
+    }
+    
+    if (filterDate) {
+      params.append("date", filterDate);
+    }
+    
+    return params.toString() ? `?${params.toString()}` : "";
+  };
+  
   // Query for responses
   const { data: responses = [], isLoading: isLoadingResponses } = useQuery<ResponseData[]>({
-    queryKey: ["/api/responses", filterAudioId, filterResponse, filterDate],
+    queryKey: [`/api/responses${prepareQueryParams()}`, filterAudioId, filterResponse, filterDate],
   });
 
   // Query for audio snippets (for filter dropdown)
@@ -118,7 +137,7 @@ const Responses = () => {
                   <SelectValue placeholder="All Audio Files" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Audio Files</SelectItem>
+                  <SelectItem value="all">All Audio Files</SelectItem>
                   {audioSnippets.map((audio) => (
                     <SelectItem key={audio.id} value={String(audio.id)}>
                       {audio.originalName}
@@ -136,7 +155,7 @@ const Responses = () => {
                   <SelectValue placeholder="All Responses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Responses</SelectItem>
+                  <SelectItem value="all">All Responses</SelectItem>
                   <SelectItem value="cough">Cough</SelectItem>
                   <SelectItem value="throat-clear">Throat Clear</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
