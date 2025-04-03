@@ -5,6 +5,10 @@ export default {
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Poppins', 'sans-serif'],
+        poppins: ['Poppins', 'sans-serif'],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
@@ -22,12 +26,23 @@ export default {
           foreground: "hsl(var(--popover-foreground))",
         },
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "#FDC500",
+          foreground: "#2E3542",
+          hover: "#E6B400",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT: "#2E3542",
+          foreground: "#FFFFFF",
+          light: "#47505F",
+          medium: "#566072",
+          dark: "#232A36",
+        },
+        hyfe: {
+          yellow: "#FDC500",
+          darkgrey: "#2E3542",
+          grey: "#707887",
+          lightgrey: "#E7E8EB",
+          background: "#F7F7F9",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
