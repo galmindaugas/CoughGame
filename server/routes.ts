@@ -84,12 +84,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(200).json({ 
         success: true, 
         message: "Login successful",
-        admin: { id: admin.id, username: admin.username }
+        admin: { id: admin.id, username: admin.username, isAdmin: 1 }
       });
     } catch (error) {
       console.error("Login error:", error);
       return res.status(500).json({ message: "An error occurred during login" });
     }
+  });
+  
+  // Check current authenticated user
+  app.get("/api/auth/check", async (req, res) => {
+    // This is a simple mock implementation
+    // In a real app, this would check session/JWT token
+    try {
+      // Just return success for demo purposes
+      // In a real app, we would check if the user is authenticated
+      return res.status(200).json({
+        success: true,
+        admin: { id: 1, username: "admin", isAdmin: 1 }
+      });
+    } catch (error) {
+      console.error("Auth check error:", error);
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+  });
+  
+  // Logout endpoint
+  app.post("/api/auth/logout", (_req, res) => {
+    // In a real app, we would invalidate the session/JWT token
+    return res.status(200).json({ 
+      success: true, 
+      message: "Logout successful" 
+    });
   });
   
   // Audio snippet upload
@@ -267,22 +293,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Submit response to audio snippet
   app.post("/api/responses", async (req, res) => {
     try {
-      const responseSchema = insertResponseSchema.extend({
-        sessionId: z.string(),
-        selectedOption: ResponseOptionEnum,
-      });
+      // We'll accept either sessionId or direct participantId
+      const { audioSnippetId, responseOption, participantId, sessionId } = req.body;
       
-      const validationResult = responseSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({ message: "Invalid request data", errors: validationResult.error.errors });
+      if (!audioSnippetId) {
+        return res.status(400).json({ message: "audioSnippetId is required" });
       }
       
-      const { sessionId, audioSnippetId, selectedOption } = validationResult.data;
+      if (!responseOption) {
+        return res.status(400).json({ message: "responseOption is required" });
+      }
       
-      // Get participant by session ID
-      const participant = await storage.getParticipantBySessionId(sessionId);
-      if (!participant) {
-        return res.status(404).json({ message: "Participant not found" });
+      let participantIdToUse: number;
+      
+      // If participantId is provided directly
+      if (participantId) {
+        participantIdToUse = Number(participantId);
+      } 
+      // Otherwise, look up by sessionId
+      else if (sessionId) {
+        const participant = await storage.getParticipantBySessionId(sessionId);
+        if (!participant) {
+          return res.status(404).json({ message: "Participant not found" });
+        }
+        participantIdToUse = participant.id;
+      } else {
+        return res.status(400).json({ message: "Either participantId or sessionId is required" });
+      }
+      
+      // Validate response option
+      if (!["cough", "throat-clear", "other"].includes(responseOption)) {
+        return res.status(400).json({ message: "Invalid responseOption" });
       }
       
       // Check if audio snippet exists
@@ -292,7 +333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if participant has already responded to this audio snippet
-      const existingResponses = await storage.getResponsesByParticipantId(participant.id);
+      const existingResponses = await storage.getResponsesByParticipantId(participantIdToUse);
       const hasResponded = existingResponses.some(r => r.audioSnippetId === audioSnippetId);
       
       if (hasResponded) {
@@ -301,9 +342,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create response
       const response = await storage.createResponse({
-        participantId: participant.id,
+        participantId: participantIdToUse,
         audioSnippetId,
-        selectedOption,
+        selectedOption: responseOption,
       });
       
       // Get updated stats for this audio snippet

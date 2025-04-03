@@ -1,4 +1,5 @@
-import { Progress } from "./progress";
+import React from "react";
+import { cn } from "@/lib/utils";
 
 interface ProgressStepsProps {
   currentStep: number;
@@ -6,17 +7,32 @@ interface ProgressStepsProps {
 }
 
 export function ProgressSteps({ currentStep, totalSteps }: ProgressStepsProps) {
-  const progressPercentage = (currentStep / totalSteps) * 100;
-  
   return (
-    <div className="mb-8">
-      <div className="flex justify-between mb-2">
-        <span className="text-sm font-medium text-gray-600">Progress</span>
-        <span className="text-sm font-medium text-gray-600">
-          Audio <span className="text-primary font-semibold">{currentStep}</span> of {totalSteps}
-        </span>
+    <div className="space-y-2">
+      <div className="flex justify-between">
+        {Array.from({ length: totalSteps }).map((_, index) => {
+          const stepNumber = index + 1;
+          const isActive = stepNumber === currentStep;
+          const isCompleted = stepNumber < currentStep;
+          
+          return (
+            <div
+              key={index}
+              className={cn(
+                "relative h-2 rounded-full flex-1",
+                isCompleted ? "bg-blue-600" : isActive ? "bg-blue-400" : "bg-gray-200",
+                index !== totalSteps - 1 ? "mr-0.5" : ""
+              )}
+            >
+              {(isActive || isCompleted) && (
+                <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-xs font-medium">
+                  {stepNumber}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <Progress value={progressPercentage} className="h-2.5" />
     </div>
   );
 }

@@ -7,13 +7,13 @@ import CompletionCard from "@/components/participant/CompletionCard";
 import { Spinner } from "@/components/ui/spinner";
 
 export default function Evaluate() {
-  const { participantId } = useParams<{ participantId: string }>();
+  const { sessionId } = useParams<{ sessionId: string }>();
   const [_, navigate] = useLocation();
   const { toast } = useToast();
   const [sessionComplete, setSessionComplete] = useState(false);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: [`/api/sessions/${participantId}`],
+    queryKey: [`/api/evaluation/${sessionId}`],
     retry: false,
   });
 
@@ -31,7 +31,8 @@ export default function Evaluate() {
   }, [isError, navigate, toast]);
 
   useEffect(() => {
-    if (data?.session?.completed) {
+    // Check if all audio snippets have responses
+    if (data?.audioSnippets && data.audioSnippets.every(snippet => snippet.hasResponded)) {
       setSessionComplete(true);
     }
   }, [data]);
@@ -63,11 +64,9 @@ export default function Evaluate() {
 
   return (
     <ParticipantEvaluation
-      participantId={participantId}
-      currentAudioId={data.currentAudio.audioId}
-      currentStep={data.currentStep}
-      totalSteps={data.totalSteps}
-      duration={data.currentAudio.duration}
+      sessionId={sessionId}
+      audioSnippets={data.audioSnippets}
+      participant={data.participant}
       onComplete={() => setSessionComplete(true)}
     />
   );

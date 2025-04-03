@@ -82,7 +82,7 @@ export default function Login() {
             </Button>
 
             <p className="text-sm text-center text-gray-500 mt-4">
-              Default credentials: admin / admin123
+              Default credentials: admin / password
             </p>
           </form>
         </CardContent>
