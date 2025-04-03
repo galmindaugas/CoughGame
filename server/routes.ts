@@ -65,31 +65,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // API routes
   
-  // Admin authentication
+  // Admin authentication is now bypassed
+  // Always return authenticated for auth check (since login is bypassed)
+  app.get("/api/auth/check", (_req, res) => {
+    return res.status(200).json({ 
+      authenticated: true,
+      admin: { id: 1, username: "admin" }
+    });
+  });
+  
+  // Keep login endpoint for backward compatibility
   app.post("/api/auth/login", async (req, res) => {
-    try {
-      const validation = loginSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ message: "Invalid request data", errors: validation.error.errors });
-      }
-      
-      const { username, password } = validation.data;
-      const admin = await storage.getAdminByUsername(username);
-      
-      if (!admin || admin.password !== password) {
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
-      
-      // In a real app, we would set a session/JWT token here
-      return res.status(200).json({ 
-        success: true, 
-        message: "Login successful",
-        admin: { id: admin.id, username: admin.username }
-      });
-    } catch (error) {
-      console.error("Login error:", error);
-      return res.status(500).json({ message: "An error occurred during login" });
-    }
+    // Always success
+    return res.status(200).json({ 
+      success: true, 
+      message: "Login successful",
+      admin: { id: 1, username: "admin" }
+    });
   });
   
   // Audio snippet upload

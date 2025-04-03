@@ -1,51 +1,14 @@
-import { useState, useEffect } from "react";
-import { useLocation, useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useRoute } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import AudioUpload from "./AudioUpload";
 import QRCodes from "./QRCodes";
 import Responses from "./Responses";
 
 const Admin = () => {
-  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<"upload" | "qr-codes" | "responses">("upload");
   const { toast } = useToast();
   const [isMatch] = useRoute("/admin");
-
-  // Check if user is authenticated
-  const { data: session, isLoading, error } = useQuery({
-    queryKey: ["/api/auth/check"],
-    retry: false,
-  });
-
-  useEffect(() => {
-    // Redirect to login if not authenticated
-    if (!isLoading && !session && !error?.message?.includes("401")) {
-      toast({
-        title: "Authentication required",
-        description: "Please login to access the admin dashboard",
-        variant: "destructive",
-      });
-      setLocation("/admin/login");
-    }
-  }, [session, isLoading, error, setLocation, toast]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  const handleLogout = () => {
-    // In a real app, this would call an API to logout
-    toast({
-      title: "Logged out",
-      description: "You have been successfully logged out",
-    });
-    setLocation("/admin/login");
-  };
 
   if (!isMatch) {
     return null;
@@ -61,26 +24,7 @@ const Admin = () => {
               <h1 className="text-xl font-semibold text-primary">Cough Conference Admin</h1>
             </div>
             <div className="flex items-center">
-              <button
-                type="button"
-                className="p-2 rounded-full text-gray-500 hover:text-gray-700 focus:outline-none"
-                onClick={handleLogout}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                  />
-                </svg>
-              </button>
+              {/* Removed logout button as it's no longer needed */}
             </div>
           </div>
         </div>

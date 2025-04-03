@@ -13,7 +13,6 @@ function Router() {
     <Switch>
       {/* Admin routes */}
       <Route path="/admin" component={Admin} />
-      <Route path="/admin/login" component={Login} />
       
       {/* Participant routes */}
       <Route path="/evaluate/:sessionId">
@@ -21,10 +20,10 @@ function Router() {
       </Route>
       <Route path="/thank-you" component={ThankYou} />
       
-      {/* Home route redirects to admin login */}
+      {/* Home route redirects to admin directly */}
       <Route path="/">
         {() => {
-          window.location.href = "/admin/login";
+          window.location.href = "/admin";
           return null;
         }}
       </Route>
