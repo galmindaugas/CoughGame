@@ -80,7 +80,22 @@ const AudioUpload = () => {
 
   const handleUpload = (file: File) => {
     // Validate file type
-    if (!file.type.match("audio/(mpeg|wav)")) {
+    const allowedMimeTypes = [
+      "audio/mpeg",      // MP3
+      "audio/wav",       // WAV
+      "audio/wave",      // WAV alternative
+      "audio/x-wav",     // WAV alternative
+      "audio/x-pn-wav",  // WAV alternative
+      "audio/vnd.wave"   // WAV alternative
+    ];
+    
+    // Check file extension as fallback
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const isValidExtension = fileExtension === 'mp3' || fileExtension === 'wav';
+    
+    // Check either MIME type or extension
+    if (!allowedMimeTypes.includes(file.type) && !isValidExtension) {
+      console.log("Rejected file with type:", file.type, "and extension:", fileExtension);
       toast({
         title: "Invalid file type",
         description: "Only MP3 and WAV files are allowed.",

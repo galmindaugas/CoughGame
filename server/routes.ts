@@ -38,10 +38,20 @@ const upload = multer({
   storage: storage_config,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (_req, file, cb) => {
-    // Accept only audio files (mp3, wav)
-    if (file.mimetype === "audio/mpeg" || file.mimetype === "audio/wav") {
+    // Accept only audio files (mp3, wav with different mime types)
+    const allowedMimeTypes = [
+      "audio/mpeg",        // MP3
+      "audio/wav",         // WAV
+      "audio/wave",        // WAV alternative
+      "audio/x-wav",       // WAV alternative
+      "audio/x-pn-wav",    // WAV alternative
+      "audio/vnd.wave"     // WAV alternative
+    ];
+    
+    if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
+      console.log("Rejected file with mimetype:", file.mimetype);
       cb(new Error("Only .mp3 and .wav files are allowed!"));
     }
   },
@@ -90,6 +100,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.file) {
         return res.status(400).json({ message: "No file was uploaded" });
       }
+      
+      // Log file details to help diagnose MIME type issues
+      console.log("Received file upload:", {
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        filename: req.file.filename
+      });
       
       // Get audio file duration (in a real app we would use a library like music-metadata)
       const duration = 5000; // Placeholder duration of 5 seconds (5000ms)
