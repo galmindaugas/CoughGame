@@ -1,9 +1,12 @@
 import { 
   Admin, InsertAdmin, AudioSnippet, InsertAudioSnippet, 
   Participant, InsertParticipant, Response, InsertResponse,
-  ResponseStats, AudioSnippetWithStats, responseOptions
+  ResponseStats, AudioSnippetWithStats, responseOptions,
+  admins, audioSnippets, participants, responses
 } from "@shared/schema";
 import { nanoid } from "nanoid";
+import { db } from "./db";
+import { eq, and, desc } from "drizzle-orm";
 
 // Storage interface
 export interface IStorage {
@@ -35,131 +38,108 @@ export interface IStorage {
   getRandomAudioSnippetsForEvaluation(count: number): Promise<AudioSnippetWithStats[]>;
 }
 
-// In-memory storage implementation
-export class MemStorage implements IStorage {
-  private admins: Map<number, Admin>;
-  private audioSnippets: Map<number, AudioSnippet>;
-  private participants: Map<number, Participant>;
-  private responses: Map<number, Response>;
-  
-  private adminCurrentId: number;
-  private audioSnippetCurrentId: number;
-  private participantCurrentId: number;
-  private responseCurrentId: number;
-  
+// Database storage implementation
+export class DatabaseStorage implements IStorage {
   constructor() {
-    this.admins = new Map();
-    this.audioSnippets = new Map();
-    this.participants = new Map();
-    this.responses = new Map();
-    
-    this.adminCurrentId = 1;
-    this.audioSnippetCurrentId = 1;
-    this.participantCurrentId = 1;
-    this.responseCurrentId = 1;
-    
-    // Create default admin user
-    this.createAdmin({
-      username: "admin",
-      password: "password" // In a real app, this would be hashed
-    });
+    // Create default admin if not exists
+    this.initializeDatabase();
+  }
+
+  private async initializeDatabase() {
+    try {
+      // Check if default admin exists
+      const admin = await this.getAdminByUsername("admin");
+      if (!admin) {
+        // Create default admin
+        await this.createAdmin({
+          username: "admin",
+          password: "password" // In a real app, this would be hashed
+        });
+        console.log("Created default admin user");
+      }
+    } catch (error) {
+      console.error("Error initializing database:", error);
+    }
   }
   
   // Admin methods
   async getAdminByUsername(username: string): Promise<Admin | undefined> {
-    return Array.from(this.admins.values()).find(
-      (admin) => admin.username === username
-    );
+    const [admin] = await db.select().from(admins).where(eq(admins.username, username));
+    return admin;
   }
   
   async createAdmin(insertAdmin: InsertAdmin): Promise<Admin> {
-    const id = this.adminCurrentId++;
-    const admin: Admin = { ...insertAdmin, id };
-    this.admins.set(id, admin);
+    const [admin] = await db.insert(admins).values(insertAdmin).returning();
     return admin;
   }
   
   // Audio snippet methods
   async createAudioSnippet(snippet: InsertAudioSnippet): Promise<AudioSnippet> {
-    const id = this.audioSnippetCurrentId++;
-    const audioSnippet: AudioSnippet = { 
-      ...snippet, 
-      id,
-      uploadDate: new Date() 
-    };
-    this.audioSnippets.set(id, audioSnippet);
+    const [audioSnippet] = await db.insert(audioSnippets).values({
+      ...snippet,
+      uploadDate: new Date()
+    }).returning();
     return audioSnippet;
   }
   
   async getAudioSnippetById(id: number): Promise<AudioSnippet | undefined> {
-    return this.audioSnippets.get(id);
+    const [audioSnippet] = await db.select().from(audioSnippets).where(eq(audioSnippets.id, id));
+    return audioSnippet;
   }
   
   async getAllAudioSnippets(): Promise<AudioSnippet[]> {
-    return Array.from(this.audioSnippets.values()).sort((a, b) => 
-      b.uploadDate.getTime() - a.uploadDate.getTime()
-    );
+    return await db.select().from(audioSnippets).orderBy(desc(audioSnippets.uploadDate));
   }
   
   async deleteAudioSnippet(id: number): Promise<boolean> {
-    return this.audioSnippets.delete(id);
+    const [deleted] = await db.delete(audioSnippets).where(eq(audioSnippets.id, id)).returning();
+    return !!deleted;
   }
   
   // Participant methods
   async createParticipant(participant: InsertParticipant): Promise<Participant> {
-    const id = this.participantCurrentId++;
     const sessionId = participant.sessionId || nanoid(8);
-    const newParticipant: Participant = { 
-      ...participant,
-      id,
+    const [newParticipant] = await db.insert(participants).values({
       sessionId,
       sessionName: participant.sessionName || null,
-      createDate: new Date() 
-    };
-    this.participants.set(id, newParticipant);
+      createDate: new Date()
+    }).returning();
     return newParticipant;
   }
   
   async getParticipantBySessionId(sessionId: string): Promise<Participant | undefined> {
-    return Array.from(this.participants.values()).find(
-      (participant) => participant.sessionId === sessionId
-    );
+    const [participant] = await db.select().from(participants).where(eq(participants.sessionId, sessionId));
+    return participant;
   }
   
   async getParticipantById(id: number): Promise<Participant | undefined> {
-    return this.participants.get(id);
+    const [participant] = await db.select().from(participants).where(eq(participants.id, id));
+    return participant;
   }
   
   async getAllParticipants(): Promise<Participant[]> {
-    return Array.from(this.participants.values());
+    return await db.select().from(participants);
   }
   
   // Response methods
   async createResponse(response: InsertResponse): Promise<Response> {
-    const id = this.responseCurrentId++;
-    const newResponse: Response = { 
-      ...response, 
-      id, 
-      responseDate: new Date() 
-    };
-    this.responses.set(id, newResponse);
+    const [newResponse] = await db.insert(responses).values({
+      ...response,
+      responseDate: new Date()
+    }).returning();
     return newResponse;
   }
   
   async getResponsesByParticipantId(participantId: number): Promise<Response[]> {
-    return Array.from(this.responses.values()).filter(
-      (response) => response.participantId === participantId
-    );
+    return await db.select().from(responses).where(eq(responses.participantId, participantId));
   }
   
   async getResponsesByAudioSnippetId(audioSnippetId: number): Promise<Response[]> {
-    return Array.from(this.responses.values()).filter(
-      (response) => response.audioSnippetId === audioSnippetId
-    );
+    return await db.select().from(responses).where(eq(responses.audioSnippetId, audioSnippetId));
   }
   
   async getAllResponses(): Promise<Response[]> {
-    return Array.from(this.responses.values());
+    return await db.select().from(responses);
   }
   
   // Analytics methods
@@ -259,4 +239,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
