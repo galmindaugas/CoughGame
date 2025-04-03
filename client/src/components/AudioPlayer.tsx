@@ -31,8 +31,12 @@ const AudioPlayer = ({ audioUrl, disabled = false }: AudioPlayerProps) => {
       setCurrentTime(0);
     });
     
-    // Set initial volume
-    audio.volume = volume / 100;
+    // Set initial volume safely
+    try {
+      audio.volume = volume / 100;
+    } catch (error) {
+      console.error("Error setting initial volume:", error);
+    }
     
     return () => {
       audio.pause();
@@ -46,7 +50,13 @@ const AudioPlayer = ({ audioUrl, disabled = false }: AudioPlayerProps) => {
   
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = volume / 100;
+      try {
+        // Set volume with error handling
+        audioRef.current.volume = volume / 100;
+        console.log("Volume set to:", volume / 100);
+      } catch (error) {
+        console.error("Error setting volume:", error);
+      }
     }
   }, [volume]);
   

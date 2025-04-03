@@ -277,8 +277,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Submit response to audio snippet
   app.post("/api/responses", async (req, res) => {
     try {
+      // If request contains participantId, use that directly;
+      // otherwise, look up participant using sessionId
       const responseSchema = insertResponseSchema.extend({
         sessionId: z.string(),
+        participantId: z.number().optional(), // Allow participantId to be passed directly
         selectedOption: ResponseOptionEnum,
       });
       
@@ -287,10 +290,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid request data", errors: validationResult.error.errors });
       }
       
-      const { sessionId, audioSnippetId, selectedOption } = validationResult.data;
+      const { sessionId, participantId, audioSnippetId, selectedOption } = validationResult.data;
       
-      // Get participant by session ID
-      const participant = await storage.getParticipantBySessionId(sessionId);
+      let participant;
+      
+      // Use participantId if provided, otherwise look up by sessionId
+      if (participantId) {
+        participant = await storage.getParticipantById(participantId);
+      } else {
+        participant = await storage.getParticipantBySessionId(sessionId);
+      }
+      
       if (!participant) {
         return res.status(404).json({ message: "Participant not found" });
       }

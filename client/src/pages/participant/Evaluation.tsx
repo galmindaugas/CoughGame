@@ -56,6 +56,7 @@ const Evaluation = ({ sessionId }: EvaluationProps) => {
         },
         body: JSON.stringify({
           sessionId,
+          participantId: data?.participant.id, // Add participant ID
           audioSnippetId,
           selectedOption,
         }),
