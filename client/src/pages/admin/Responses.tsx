@@ -42,27 +42,9 @@ const Responses = () => {
   const { toast } = useToast();
 
   // Prepare query parameters
-  const prepareQueryParams = () => {
-    const params = new URLSearchParams();
-    
-    if (filterAudioId !== "all") {
-      params.append("audioId", filterAudioId);
-    }
-    
-    if (filterResponse !== "all") {
-      params.append("responseType", filterResponse);
-    }
-    
-    if (filterDate) {
-      params.append("date", filterDate);
-    }
-    
-    return params.toString() ? `?${params.toString()}` : "";
-  };
-  
   // Query for responses
   const { data: responses = [], isLoading: isLoadingResponses } = useQuery<ResponseData[]>({
-    queryKey: [`/api/responses${prepareQueryParams()}`, filterAudioId, filterResponse, filterDate],
+    queryKey: ["/api/responses"],
   });
 
   // Query for audio snippets (for filter dropdown)
